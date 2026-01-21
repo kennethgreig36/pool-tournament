@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pool Tournament</title>
+<script crossorigin="anonymous" src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin="anonymous" src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+body { margin:0; background:#111; color:#eee; font-family:system-ui,sans-serif; }
+button{padding:6px 10px;margin:4px;cursor:pointer;}
+textarea{width:100%;padding:8px;margin-bottom:12px;}
+.container{padding:16px;}
+.view-only button:disabled{opacity:1; cursor:not-allowed;}
+.view-only .match button:disabled{opacity:1; cursor:not-allowed;}
+.group{border:1px solid #333;padding:12px;margin-bottom:16px;}
+table{width:100%;border-collapse:collapse;margin-top:8px;}
+th,td{border:1px solid #333;padding:4px;text-align:center;}
+.top2{background:#1e4620;}
+.winner{background:#4caf50;color:#000;opacity:1;}
+.bracket{position:relative;padding:60px 20px 20px 80px; background:#0b0b0b; overflow-x:visible;}
+.match{position:absolute;width:150px;}
+.match button{width:100%; margin-bottom:4px; background:#1a1a1a; color:#eee; border:1px solid #333; opacity:1;}
+.match button:disabled{opacity:0.45; cursor:not-allowed;}
+.match button.winner{background:#4caf50; color:#000; border-color:#2e7d32; opacity:1;}
+.match button.winner:disabled{opacity:1;}
+.match button.pending:disabled{opacity:1;}
+.bye{text-align:center;font-size:12px;color:#aaa;}
+svg{position:absolute; top:0; left:0; pointer-events:none; overflow:visible;}
+svg line{stroke:#666; stroke-width:2;}
+svg line.stub{stroke:#666; stroke-width:2;}
+.round-label{position:absolute;color:#eee;font-weight:bold;text-align:center;width:150px;}
+.winner-box{display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center;width:100%;height:52px;border-radius:6px;background:#111;border:1px solid #333;color:#eee;}
+.winner-box .label{font-size:11px;color:#94a3b8;}
+.winner-box .name{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;}
+.winner-box .row{display:flex;align-items:center;gap:8px;}
+.winner-box svg{position:static; overflow:visible;}
+.winner-box .trophy{width:18px;height:18px;flex:0 0 18px;}
+.landing{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;}
+.landing-card{width:min(720px, 100%); border:1px solid #333; border-radius:16px; background:#0b0b0b; overflow:hidden;}
+.landing-hero{background:linear-gradient(135deg,#0f172a,#111,#0b0b0b); padding:18px 18px 10px; display:flex; align-items:center; justify-content:center;}
+.landing-hero svg{position:static; width:min(520px, 100%); height:auto;}
+.landing-body{padding:18px;}
+.landing-body h1{margin:0 0 8px 0; font-size:28px;}
+.landing-body .subtitle{color:#94a3b8; margin:0 0 14px 0;}
+.landing-details{display:grid; gap:8px; margin-top:12px;}
+.landing-details .row{display:flex; justify-content:space-between; gap:12px; padding:10px 12px; background:#111; border:1px solid #333; border-radius:12px;}
+.landing-details .k{color:#94a3b8;}
+.landing-note{margin-top:14px; color:#94a3b8; font-size:13px;}
+.app-header{border-radius:16px;}
+.app-header-inner{display:flex; align-items:center; gap:12px; width:100%;}
+.app-header .actions{display:flex; align-items:center; gap:10px; flex:0 0 auto;}
+.app-header .center{display:flex; align-items:center; justify-content:center; text-align:center; gap:10px; flex:1;}
+.app-header .title{font-weight:900; font-size:18px; margin:0;}
+.app-header .sub{color:#94a3b8; font-size:12px; margin-top:2px;}
+.app-header .mini{width:88px; height:40px; border-radius:12px; border:1px solid #333; background:linear-gradient(135deg,#064e3b,#0f766e); display:flex; align-items:center; justify-content:center; overflow:hidden;}
+.app-header .mini svg{position:static; width:78px; height:32px;}
+.app-header .actions .vo{color:#94a3b8; font-size:12px;}
+@media (max-width: 520px){
+  .app-header-inner{flex-direction:column; align-items:stretch;}
+  .app-header .actions{justify-content:center;}
+}
+@media (max-width: 768px){
+  /* Mobile: bracket area scrolls horizontally without widening the page */
+  .bracket{overflow-x:auto; width:100%; max-width:100%; -webkit-overflow-scrolling:touch;}
+}
+</style>
+</head>
+<body>
+<div id="root">Loading…</div>
+<pre id="fatal" style="display:none; white-space:pre-wrap; background:#2a0b0b; color:#ffd6d6; padding:12px; margin:12px; border:1px solid #ff6b6b; border-radius:8px;"></pre>
+<script>
+// This runs even if Babel/React fail to load (so we don't get a "blank page").
+(function(){
+  const fatalEl = document.getElementById("fatal");
+  function showFatal(err){
+    if(!fatalEl) return;
+    fatalEl.style.display = "block";
+    fatalEl.textContent = String((err && err.stack) || err);
+  }
+  // Expose for React error boundary.
+  window.__showFatal = showFatal;
+  window.addEventListener("error", (e)=>{
+    // Note: cross-origin script errors often show only "Script error." unless scripts use crossorigin.
+    const parts = [
+      e?.message || "Unknown error",
+      e?.filename ? `at ${e.filename}:${e.lineno||0}:${e.colno||0}` : null
+    ].filter(Boolean);
+    showFatal(e?.error || parts.join("\n"));
+  });
+  window.addEventListener("unhandledrejection", (e)=>showFatal(e.reason));
+
+  // If the app hasn't replaced "Loading…" shortly after load, surface likely causes.
+  window.addEventListener("load", () => {
+    setTimeout(() => {
+      const root = document.getElementById("root");
+      if(!root) return;
+      const t = (root.textContent || "").trim();
+      if(t.toLowerCase().startsWith("loading")){
+        // Some Babel builds no longer auto-transform <script type="text/babel">.
+        // If Babel is available, try transforming once.
+        if(window.Babel && !window.__didBabelTransform){
+          window.__didBabelTransform = true;
+          try{
+            window.Babel.transformScriptTags();
+            return;
+          }catch(e){
+            showFatal(e);
+            return;
+          }
+        }
+        showFatal(
+          "App did not start.\n\n" +
+          "- If React/Babel CDN is blocked/offline, the scripts from unpkg cannot load.\n" +
+          "- Check DevTools Network tab for failed requests to unpkg.\n" +
+          "- Run via Live Server (http://...) rather than file:// for most reliable behavior."
+        );
+      }
+    }, 1500);
+  });
+})();
+</script>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef } = React;
+const APP_VERSION = 10;
+const BRACKET_MARGIN_LEFT = 0;
+const BRACKET_MARGIN_TOP = 80;
+const GX = 220;
+const MATCH_WIDTH = 150;
+const WINNER_WIDTH = 230;
+const STUB_LEN = 36;
+const STUB_GAP = -4;
+const MATCH_INSET_X = STUB_LEN + STUB_GAP;
+const CONNECTOR_Y = 30; // visually centered between the two player buttons
+const CLIENT_ID = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2));
+const URL_PARAMS = new URLSearchParams(window.location.search);
+// Explicit roles:
+// - Editor must use ?edit=1 (only editors try to acquire the lock)
+// - Everyone else is view-only and will not steal the lock
+const FORCE_VIEW = URL_PARAMS.has("view");
+const WANT_EDIT = (URL_PARAMS.get("edit") === "1") && !FORCE_VIEW;
+
+class ErrorBoundary extends React.Component {
+  constructor(props){
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error){
+    return { error };
+  }
+  componentDidCatch(error){
+    try{ window.__showFatal && window.__showFatal(error); }catch(_){}
+  }
+  render(){
+    if(this.state.error){
+      return <div className="container">
+        <div>Something went wrong. The error details are shown above.</div>
+        <button onClick={()=>{
+          localStorage.removeItem('pool-tournament');
+          window.location.reload();
+        }}>Reload</button>
+      </div>;
+    }
+    return this.props.children;
+  }
+}
+
+function goToEditMode(){
+  const u = new URL(window.location.href);
+  u.searchParams.set("edit","1");
+  u.searchParams.delete("view");
+  window.location.href = u.toString();
+}
+
+function Landing(){
+  return <div className="landing">
+    <div className="landing-card">
+      <div className="landing-hero">
+        {/* Simple inline pool-themed illustration (no external assets) */}
+        <svg viewBox="0 0 900 360" role="img" aria-label="Pool tournament">
+          <defs>
+            <linearGradient id="felt" x1="0" x2="1">
+              <stop offset="0" stopColor="#064e3b"/>
+              <stop offset="1" stopColor="#0f766e"/>
+            </linearGradient>
+            <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="6" stdDeviation="8" floodColor="#000" floodOpacity="0.6"/>
+            </filter>
+          </defs>
+          <rect x="40" y="40" width="820" height="280" rx="26" fill="url(#felt)" stroke="#1f2937" strokeWidth="10" filter="url(#shadow)"/>
+          <rect x="70" y="70" width="760" height="220" rx="18" fill="none" stroke="#0b0b0b" strokeOpacity="0.35" strokeWidth="6"/>
+          {/* cue */}
+          <path d="M120 270 L760 120" stroke="#d6d3d1" strokeWidth="10" strokeLinecap="round" opacity="0.85"/>
+          <path d="M760 120 L820 90" stroke="#a16207" strokeWidth="14" strokeLinecap="round" opacity="0.9"/>
+          {/* balls */}
+          <g transform="translate(0,0)" filter="url(#shadow)">
+            <circle cx="250" cy="155" r="34" fill="#fbbf24"/><text x="250" y="165" textAnchor="middle" fontFamily="system-ui" fontSize="22" fill="#111">1</text>
+            <circle cx="330" cy="205" r="34" fill="#ef4444"/><text x="330" y="215" textAnchor="middle" fontFamily="system-ui" fontSize="22" fill="#111">3</text>
+            <circle cx="420" cy="165" r="34" fill="#3b82f6"/><text x="420" y="175" textAnchor="middle" fontFamily="system-ui" fontSize="22" fill="#111">2</text>
+            <circle cx="520" cy="215" r="34" fill="#22c55e"/><text x="520" y="225" textAnchor="middle" fontFamily="system-ui" fontSize="22" fill="#111">6</text>
+            <circle cx="610" cy="165" r="34" fill="#111827"/><text x="610" y="175" textAnchor="middle" fontFamily="system-ui" fontSize="22" fill="#fff">8</text>
+          </g>
+        </svg>
+      </div>
+      <div className="landing-body">
+        <h1>Lamp Pool Tournament</h1>
+        <p className="subtitle">Live bracket shown here when the tournament starts.</p>
+        <div className="landing-details">
+          <div className="row"><div className="k">Starts</div><div>6th February, 7pm</div></div>
+          <div className="row"><div className="k">Entry</div><div>£5</div></div>
+          <div className="row"><div className="k">Prize</div><div>Winner takes all</div></div>
+        </div>
+        <div className="landing-note">This page is view-only until the tournament begins.</div>
+      </div>
+    </div>
+  </div>;
+}
+
+function AppHeader({canEdit,onReset,showReset=true,showViewOnly=true}){
+  return <div className="group app-header">
+    <div className="app-header-inner">
+      <div className="actions">
+        {showViewOnly && !canEdit && <div className="vo">View-only mode</div>}
+        {showReset && <button disabled={!canEdit} onClick={onReset}>Reset Tournament</button>}
+      </div>
+
+      <div className="center">
+        <div>
+          <div className="title">Lamp Pool Tournament</div>
+          <div className="sub">Live standings & bracket</div>
+        </div>
+        <div className="mini" aria-hidden="true">
+          {/* small pool-themed icon */}
+          <svg viewBox="0 0 120 48">
+            <rect x="4" y="6" width="112" height="36" rx="10" fill="none" stroke="#0b0b0b" strokeOpacity="0.35" strokeWidth="3"/>
+            <circle cx="34" cy="24" r="9" fill="#fbbf24"/>
+            <circle cx="58" cy="28" r="9" fill="#3b82f6"/>
+            <circle cx="82" cy="22" r="9" fill="#ef4444"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+function touchState(s){
+  // Ensure rev always exists so saves have a meaningful starting point.
+  const rev = (s && typeof s.rev === "number") ? s.rev : 0;
+  return {...s, rev, updatedAt: Date.now(), updatedBy: CLIENT_ID};
+}
+
+function migrateState(input){
+  // Best-effort migration so old saved/server states don't force a reset after small feature additions.
+  if(!input || typeof input !== "object") return { ok:false };
+  const s = structuredClone(input);
+
+  if(typeof s.rev !== "number") s.rev = 0;
+  if(typeof s.updatedAt !== "number") s.updatedAt = Date.now();
+  if(typeof s.updatedBy !== "string") s.updatedBy = "migrated";
+  if(typeof s.finalWinTarget !== "number") s.finalWinTarget = 2;
+  s.finalWinTarget = Math.max(1, Math.min(5, Math.floor(s.finalWinTarget)));
+
+  if(!("mode" in s)) s.mode = null;
+
+  if(s.mode === "group"){
+    if(!Array.isArray(s.groups)) return { ok:false };
+    if(!s.results || typeof s.results !== "object") s.results = {};
+    if(!Array.isArray(s.groupSchedule)) s.groupSchedule = s.groups.map(g=>buildGroupSchedule(g));
+    if(typeof s.groupFixtureIdx !== "number") s.groupFixtureIdx = 0;
+    if(!Array.isArray(s.groupConfirmed) || s.groupConfirmed.length !== s.groups.length){
+      s.groupConfirmed = new Array(s.groups.length).fill(false);
+    }
+  }
+
+  if(s.mode === "knockout"){
+    if(!Array.isArray(s.knockout)) return { ok:false };
+    // Ensure each match has a score array (final is first-to-2).
+    s.knockout.forEach(r=>{
+      if(!r || !Array.isArray(r.matches)) return;
+      r.matches.forEach(m=>{
+        if(!m || typeof m !== "object") return;
+        if(!Array.isArray(m.score) || m.score.length !== 2) m.score = [0,0];
+      });
+    });
+  }
+
+  s.version = APP_VERSION;
+  return { ok:true, state:s };
+}
+
+function apiOriginsToTry(){
+  // Allow explicit API override to avoid noisy probing:
+  // Example: http://localhost:5500/?api=http://localhost:3002
+  const params = new URLSearchParams(window.location.search);
+  const api = params.get("api");
+  if(api) return [api.replace(/\/+$/,"")];
+
+  // Otherwise, try same-origin first. If running from Live Server (:5500),
+  // try a small, practical set of common local API ports.
+  const origin = window.location.origin;
+  const host = window.location.hostname || "localhost";
+  const proto = window.location.protocol || "http:";
+  const out = [origin];
+  if(window.location.port === "5500"){
+    // Keep this tight to reduce ERR_CONNECTION_REFUSED noise in DevTools.
+    [3002,3003,3004,3005,8080].forEach(p=>out.push(`${proto}//${host}:${p}`));
+  }
+  return [...new Set(out)];
+}
+
+let API_ORIGIN = null;
+async function resolveApiOrigin(){
+  if(API_ORIGIN) return API_ORIGIN;
+
+  // Try cached origin first (avoids probing every refresh).
+  const cached = localStorage.getItem("pool-tournament-api-origin");
+  if(cached){
+    try{
+      const res = await fetch(`${cached}/tournament`, {cache:"no-store"});
+      if(res.ok && (res.headers.get("x-pool-tournament-api") || "") === "1"){
+        API_ORIGIN = cached;
+        return API_ORIGIN;
+      }
+    }catch(_){}
+    localStorage.removeItem("pool-tournament-api-origin");
+  }
+
+  const tries = apiOriginsToTry();
+  for(const o of tries){
+    try{
+      const res = await fetch(`${o}/tournament`, {cache:"no-store"});
+      if(!res.ok) continue;
+      // Must be our API (prevents accidentally using Live Server or another app on that port).
+      if((res.headers.get("x-pool-tournament-api") || "") !== "1") continue;
+      // Validate that it's *our* API (some other service might return 200 on these ports).
+      const ct = res.headers.get("content-type") || "";
+      if(!ct.includes("application/json")) continue;
+      const data = await res.json();
+      const looksLikeTournament =
+        data &&
+        typeof data === "object" &&
+        ("mode" in data) &&
+        ("players" in data) &&
+        ("groups" in data) &&
+        ("winner" in data);
+      if(!looksLikeTournament) continue;
+      API_ORIGIN = o;
+      localStorage.setItem("pool-tournament-api-origin", API_ORIGIN);
+      return API_ORIGIN;
+    }catch(_){}
+  }
+  throw new Error("No server state");
+}
+
+async function apiGetState(){
+  try{
+    const base = await resolveApiOrigin();
+    const res = await fetch(`${base}/tournament`, {cache:"no-store"});
+    if(!res.ok) throw new Error("No server state");
+    return await res.json();
+  }catch(e){
+    // If we accidentally latched onto the wrong origin (e.g. live-server fallback),
+    // clear and allow re-discovery on next attempt.
+    API_ORIGIN = null;
+    throw e;
+  }
+}
+
+async function apiSaveState(state){
+  try{
+    const base = await resolveApiOrigin();
+    await fetch(`${base}/tournament`, {
+      method:"POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(state),
+    });
+  }catch(e){
+    API_ORIGIN = null;
+    throw e;
+  }
+}
+
+async function apiReset(){
+  try{
+    const base = await resolveApiOrigin();
+    await fetch(`${base}/reset`, {method:"POST"});
+  }catch(e){
+    API_ORIGIN = null;
+    throw e;
+  }
+}
+
+async function apiAcquireLock(){
+  const base = await resolveApiOrigin();
+  const res = await fetch(`${base}/lock`, {
+    method:"POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({clientId: CLIENT_ID}),
+  });
+  if(!res.ok) throw new Error("Lock unavailable");
+  return await res.json();
+}
+
+async function apiGetLock(){
+  const base = await resolveApiOrigin();
+  const res = await fetch(`${base}/lock`, {cache:"no-store"});
+  if(!res.ok) throw new Error("Lock unavailable");
+  return await res.json();
+}
+
+function buildGroupSchedule(players){
+  const pairs=[];
+  for(let i=0;i<players.length;i++){
+    for(let j=i+1;j<players.length;j++){
+      pairs.push([players[i], players[j]]);
+    }
+  }
+
+  // Greedy random schedule: avoid repeating either player from the previous match when possible.
+  const remaining = pairs.slice();
+  const out=[];
+  let lastA=null, lastB=null;
+  while(remaining.length){
+    let candidates = remaining.filter(([a,b])=>!(a===lastA||a===lastB||b===lastA||b===lastB));
+    if(candidates.length===0) candidates = remaining;
+    const pick = candidates[Math.floor(Math.random()*candidates.length)];
+    out.push(pick);
+    remaining.splice(remaining.indexOf(pick), 1);
+    lastA = pick[0]; lastB = pick[1];
+  }
+  return out;
+}
+
+function shuffleInPlace(arr){
+  for(let i=arr.length-1; i>0; i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function buildFixtures(groups, groupSchedule){
+  // Interleave fixtures: 1 match from each group, then repeat.
+  const schedules = (groupSchedule && groupSchedule.length) ? groupSchedule : groups.map(g=>buildGroupSchedule(g));
+  const maxLen = Math.max(...schedules.map(s=>s.length));
+  const fixtures=[];
+  for(let mi=0; mi<maxLen; mi++){
+    for(let gi=0; gi<schedules.length; gi++){
+      const pair = schedules[gi]?.[mi];
+      if(!pair) continue;
+      const [p1,p2] = pair;
+      fixtures.push({gi, p1, p2, key:`${p1}-${p2}`});
+    }
+  }
+  return fixtures;
+}
+
+function calcGroupStandings(groups, results, g){
+  const scores={};
+  groups[g].forEach(p=>scores[p]={w:0,g:0});
+  const gresults = results[g]||{};
+  Object.entries(gresults).forEach(([k,w])=>{
+    const [a,b]=k.split("-");
+    if(!scores[a] || !scores[b]) return;
+    scores[a].g++; scores[b].g++;
+    if(scores[w]) scores[w].w++;
+  });
+  return Object.entries(scores)
+    .map(([name,s])=>({...s,name,pct:s.g?s.w/s.g:0}))
+    // Priority: wins (desc), losses (asc), win% (desc), then alphabetical
+    .sort((a,b)=>{
+      const aL = a.g - a.w;
+      const bL = b.g - b.w;
+      return (b.w - a.w) ||
+        (aL - bL) ||
+        (b.pct - a.pct) ||
+        a.name.localeCompare(b.name);
+    });
+}
+
+function App() {
+  const [state,setState] = useState(null);
+  // Start safe: don't write to the API until we know whether we're local-only or we have the lock.
+  const [canEdit,setCanEdit] = useState(false);
+  const [lockInfo,setLockInfo] = useState(null);
+  const suppressPostRef = useRef(false);
+  const apiSeenRef = useRef(false);
+  const lastConflictAtRef = useRef(0);
+  const saveInFlightRef = useRef(false);
+  const pendingSaveRef = useRef(null);
+  const lastModeRef = useRef(null);
+
+  useEffect(()=>{
+    try{
+      const s=localStorage.getItem('pool-tournament');
+      if(!s) return;
+      const parsed = JSON.parse(s);
+      const migrated = migrateState(parsed);
+      if(!migrated.ok) throw new Error("Saved state version mismatch");
+      setState(migrated.state);
+    }catch(e){
+      // Corrupt/old saved state shouldn't brick the app.
+      localStorage.removeItem('pool-tournament');
+      setState(null);
+    }
+  },[]);
+
+  // If a server is available, load the "in progress" state so other devices see the same stage.
+  useEffect(()=>{
+    let cancelled = false;
+    (async ()=>{
+      try{
+        const remote = await apiGetState();
+        if(cancelled) return;
+        if(!remote) return;
+        // If server has no active tournament, viewers should show the start screen (not stale localStorage).
+        if(!remote.mode){
+          if(!WANT_EDIT){
+            localStorage.removeItem('pool-tournament');
+            setState(null);
+          }
+          return;
+        }
+        const migrated = migrateState(remote);
+        if(!migrated.ok) return;
+        suppressPostRef.current = true;
+        setState(migrated.state);
+      }catch(_){
+        // No server (e.g. Live Server): ignore and stay on localStorage mode.
+      }
+    })();
+    return ()=>{ cancelled = true; };
+  },[]);
+
+  // Acquire/refresh an editor lock periodically, BUT only when the user intends to edit (?edit=1).
+  // Without ?view=1, we try to acquire the lock and become editor.
+  useEffect(()=>{
+    let cancelled = false;
+    async function tick(){
+      try{
+        if(FORCE_VIEW || !WANT_EDIT){
+          setCanEdit(false);
+          const li = await apiGetLock().catch(()=>null);
+          if(li) setLockInfo(li);
+          return;
+        }
+        const base = await resolveApiOrigin();
+        // Once an API is present, editing must be backed by a lock.
+        if(!apiSeenRef.current){
+          apiSeenRef.current = true;
+          setCanEdit(false);
+        }
+        if(cancelled) return;
+        const lockRes = await apiAcquireLock();
+        if(cancelled) return;
+        setLockInfo(lockRes || null);
+        setCanEdit(!!lockRes?.granted);
+      }catch(_){
+        // No server => local-only mode is editable regardless of ?edit
+        if(cancelled) return;
+        // If we've ever successfully seen an API, do NOT change canEdit on transient failures (prevents lockout flapping).
+        if(!apiSeenRef.current) setCanEdit(true);
+      }
+    }
+    tick();
+    const id = setInterval(tick, 5000);
+    return ()=>{ cancelled = true; clearInterval(id); };
+  },[]);
+
+  useEffect(()=>{if(state)localStorage.setItem('pool-tournament',JSON.stringify(state));},[state]);
+
+  // Persist changes to server if available (best-effort).
+  useEffect(()=>{
+    if(!state) return;
+    if(!canEdit) return;
+    // If an API exists, only persist when we actually have the lock (prevents 403 spam / "reverting").
+    if(apiSeenRef.current && !lockInfo?.granted) return;
+    if(suppressPostRef.current){ suppressPostRef.current = false; return; }
+    // Serialize writes to avoid overlapping POSTs with stale rev (which causes 409 noise).
+    const snapshot = state;
+    pendingSaveRef.current = snapshot;
+
+    const t = setTimeout(async ()=>{
+      if(saveInFlightRef.current) return;
+      const flush = async () => {
+        const sToSave = pendingSaveRef.current;
+        pendingSaveRef.current = null;
+        if(!sToSave) return;
+
+        saveInFlightRef.current = true;
+        try{
+          const base = await resolveApiOrigin();
+          const res = await fetch(`${base}/tournament`, {
+            method:"POST",
+            headers: {
+              "Content-Type":"application/json",
+              "X-Client-Id": CLIENT_ID,
+              "X-Rev": String(sToSave.rev ?? 0),
+            },
+            body: JSON.stringify({...sToSave, rev: sToSave.rev ?? 0}),
+          });
+
+          if(res.status===403){
+            setCanEdit(false);
+            return;
+          }
+
+          if(res.status===409){
+            const payload = await res.json().catch(()=>null);
+            const serverRev = Number(payload?.serverRev);
+            const serverState = payload?.state;
+            // If we're the editor, a 409 usually means our local rev was stale (e.g. server had an older tournament).
+            // Retry once using the server's current rev so we can overwrite authoritatively (lock still enforced server-side).
+            if(Number.isFinite(serverRev)){
+              const res2 = await fetch(`${base}/tournament`, {
+                method:"POST",
+                headers: {
+                  "Content-Type":"application/json",
+                  "X-Client-Id": CLIENT_ID,
+                  "X-Rev": String(serverRev),
+                },
+                body: JSON.stringify({...sToSave, rev: serverRev}),
+              });
+              if(res2.ok){
+                const saved2 = await res2.json().catch(()=>null);
+                if(saved2){
+                  suppressPostRef.current = true;
+                  setState(saved2);
+                }
+                return;
+              }
+            }
+            if(serverState){
+              suppressPostRef.current = true;
+              setState(serverState);
+              lastConflictAtRef.current = Date.now();
+            }
+            return;
+          }
+
+          if(res.ok){
+            const saved = await res.json().catch(()=>null);
+            if(saved){
+              suppressPostRef.current = true;
+              setState(saved);
+            }
+          }
+        }catch(_){
+          // ignore if no server
+        }finally{
+          saveInFlightRef.current = false;
+          // If something changed while we were saving, flush again.
+          if(pendingSaveRef.current) flush();
+        }
+      };
+
+      flush();
+    }, 250);
+
+    return ()=>{ clearTimeout(t); };
+  }, [state, canEdit, lockInfo]);
+
+  // Poll for remote updates so a second device stays in sync.
+  useEffect(()=>{
+    // The editor should not poll and overwrite their own in-progress selections.
+    if(canEdit) return;
+    const id = setInterval(async ()=>{
+      try{
+        const remote = await apiGetState();
+        if(!remote) return;
+        // If the server was reset / tournament ended, viewers should return to the landing screen.
+        if(!remote.mode){
+          if(state){
+            localStorage.removeItem('pool-tournament');
+            suppressPostRef.current = true;
+            setState(null);
+          }
+          return;
+        }
+        if(remote.updatedBy === CLIENT_ID) return;
+        const localRev = (state && typeof state.rev === "number") ? state.rev : -1;
+        const remoteRev = (remote && typeof remote.rev === "number") ? remote.rev : -1;
+        const localUpdated = state?.updatedAt || 0;
+        const remoteUpdated = remote.updatedAt || 0;
+
+        const isNewer =
+          (remoteRev > localRev) ||
+          (remoteRev === -1 && remoteUpdated > localUpdated);
+
+        if(isNewer){
+          const migrated = migrateState(remote);
+          if(!migrated.ok) return;
+          suppressPostRef.current = true;
+          setState(migrated.state);
+        }
+      }catch(_){}
+    }, 1500);
+    return ()=>clearInterval(id);
+  }, [state, canEdit]);
+
+  // Mobile UX: when switching into knockout, scroll to top (bracket starts near top and is the focus).
+  useEffect(()=>{
+    const mode = state?.mode ?? null;
+    if(mode === lastModeRef.current) return;
+    lastModeRef.current = mode;
+    if(mode === "knockout" && window.matchMedia && window.matchMedia("(max-width: 768px)").matches){
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [state?.mode]);
+
+  const hasActiveTournament = !!(state && (state.mode==="group" || state.mode==="knockout"));
+
+  // Before the tournament begins, viewers should always see the start/landing screen (including on mobile).
+  if(!hasActiveTournament && (FORCE_VIEW || !WANT_EDIT)){
+    return <Landing/>;
+  }
+
+  // Editor intent, but no active tournament yet.
+  if(!hasActiveTournament){
+    if(!canEdit){
+      const holder =
+        lockInfo?.holder?.clientId ||
+        lockInfo?.lockedBy ||
+        lockInfo?.clientId ||
+        null;
+      return <div className="container">
+        <AppHeader canEdit={false} showReset={false} showViewOnly={false}/>
+        <div className="group">
+          <div style={{fontWeight:800, marginBottom:6}}>Editing is locked</div>
+          <div style={{color:"#94a3b8"}}>
+            Another device is currently the editor{holder ? ` (${holder})` : ""}. Try again in a moment.
+          </div>
+          <div style={{marginTop:12, display:"flex", gap:10, flexWrap:"wrap"}}>
+            <button onClick={()=>window.location.reload()}>Retry</button>
+            <button onClick={()=>{
+              const u = new URL(window.location.href);
+              u.searchParams.set("view","1");
+              u.searchParams.delete("edit");
+              window.location.href = u.toString();
+            }}>Switch to view-only</button>
+          </div>
+        </div>
+      </div>;
+    }
+    return <Setup onStart={setState}/>;
+  }
+
+  function isPowerOfTwo(n){ return Number.isInteger(n) && n>0 && (n & (n-1))===0; }
+  function isKnockoutShapeOk(k){
+    if(!Array.isArray(k) || k.length<1) return false;
+    if(!k.every(r => r && Array.isArray(r.matches))) return false;
+    const base = k[0].matches.length;
+    if(!Number.isInteger(base) || base<1 || !isPowerOfTwo(base)) return false;
+    for(let ri=0; ri<k.length; ri++){
+      const expected = base / (2**ri);
+      if(!Number.isInteger(expected) || expected<1) return false;
+      if(k[ri].matches.length !== expected) return false;
+    }
+    return true;
+  }
+
+  const knockoutOk = state?.mode!=="knockout" || isKnockoutShapeOk(state.knockout);
+
+  if(!knockoutOk){
+    return <div className="container">
+      <div>Saved bracket is from an older version. Please reset and start again.</div>
+      <button onClick={()=>{localStorage.removeItem('pool-tournament'); apiReset().catch(()=>{}); setState(null);}}>Reset Tournament</button>
+    </div>;
+  }
+
+  const handleReset = ()=>{localStorage.removeItem('pool-tournament'); resolveApiOrigin().then(base=>fetch(`${base}/reset`, {method:"POST", headers: {"X-Client-Id": CLIENT_ID}})).catch(()=>{}); setState(null);};
+
+  return <div className={"container" + (!canEdit ? " view-only" : "")}>
+    <AppHeader canEdit={canEdit} onReset={handleReset}/>
+    {state.mode==="group" && <Groups state={state} setState={setState} canEdit={canEdit}/>}
+    {state.mode==="knockout" && <Knockout state={state} setState={setState} canEdit={canEdit}/>}
+  </div>;
+}
+
+function Setup({onStart}){
+  const [text,setText]=useState("");
+  const [finalWinTarget,setFinalWinTarget] = useState(2);
+  const players=text.split("\n").map(p=>p.trim()).filter(Boolean);
+  const divisibleBy4 = players.length % 4 === 0;
+  function startGroup() {
+    if(players.length<4) return;
+    const shuffled = shuffleInPlace([...players]);
+    const groups=[];
+    for(let i=0;i<shuffled.length;i+=4) groups.push(shuffled.slice(i,i+4));
+    const groupSchedule = groups.map(g=>buildGroupSchedule(g));
+    onStart(touchState({
+      version:APP_VERSION,
+      mode:"group",
+      finalWinTarget,
+      groups,
+      groupSchedule,
+      groupFixtureIdx: 0,
+      groupConfirmed: new Array(groups.length).fill(false),
+      results:{}
+    }));
+  }
+  function startKnockout() {
+    if(players.length<2) return;
+    const shuffled = shuffleInPlace([...players]);
+    onStart(touchState({version:APP_VERSION, mode:"knockout", finalWinTarget, knockout:generateKnockout(shuffled)}));
+  }
+  return <div className="container">
+    <AppHeader canEdit={true} showReset={false} showViewOnly={false}/>
+    <div className="group">
+      <div style={{color:"#94a3b8", marginBottom:6}}>Final format</div>
+      <label style={{display:"block", marginBottom:6}}>Wins needed to win the final</label>
+      <select value={finalWinTarget} onChange={e=>setFinalWinTarget(parseInt(e.target.value,10))}>
+        <option value={1}>1 (single game)</option>
+        <option value={2}>2 (first to 2)</option>
+        <option value={3}>3 (first to 3)</option>
+        <option value={4}>4 (first to 4)</option>
+        <option value={5}>5 (first to 5)</option>
+      </select>
+    </div>
+    <textarea rows="10" placeholder="One player per line" value={text} onChange={e=>setText(e.target.value)}/>
+    {divisibleBy4 && <button disabled={players.length<4} onClick={startGroup}>Group Stage</button>}
+    <button disabled={players.length<2} onClick={startKnockout}>Knockout Only</button>
+  </div>;
+}
+
+/* --- GROUP STAGE --- */
+function Groups({state,setState,canEdit}){
+  const {groups,results,groupSchedule} = state;
+  const groupConfirmed = state.groupConfirmed || new Array(groups.length).fill(false);
+  const fixtures = useMemo(()=>buildFixtures(groups, groupSchedule), [groups, groupSchedule]);
+
+  const fixtureIdx = useMemo(()=>{
+    const idx = state.groupFixtureIdx ?? 0;
+    if(!fixtures.length) return 0;
+    return Math.min(Math.max(idx, 0), fixtures.length-1);
+  }, [state.groupFixtureIdx, fixtures.length]);
+
+  function winnerForFixture(f){
+    return results?.[f.gi]?.[f.key];
+  }
+
+  function nextUnplayedFrom(startIdx){
+    if(!fixtures.length) return 0;
+    for(let i=startIdx; i<fixtures.length; i++){
+      const f = fixtures[i];
+      if(!winnerForFixture(f)) return i;
+    }
+    for(let i=0; i<startIdx; i++){
+      const f = fixtures[i];
+      if(!winnerForFixture(f)) return i;
+    }
+    return startIdx;
+  }
+
+  function setFixtureIdx(idx){
+    if(!canEdit) return;
+    setState(s=>touchState({...s, groupFixtureIdx: Math.min(Math.max(idx,0), fixtures.length-1)}));
+  }
+
+  function setWinner(g,a,b,w){
+    if(!canEdit) return;
+    if(groupConfirmed[g]) return;
+    setState(s=>{
+      const r=structuredClone(s.results);
+      r[g]=r[g]||{};
+      r[g][`${a}-${b}`]=w;
+      const fx = buildFixtures(s.groups, s.groupSchedule);
+      const current = Math.min(Math.max(s.groupFixtureIdx ?? 0, 0), fx.length-1);
+      // After selecting a winner, jump to the next unplayed fixture (still allows manual navigation).
+      let next = current+1;
+      for(let i=next;i<fx.length;i++){
+        const f = fx[i];
+        const ww = r?.[f.gi]?.[f.key];
+        if(!ww) { next=i; return touchState({...s, results:r, groupFixtureIdx: next}); }
+      }
+      for(let i=0;i<current;i++){
+        const f = fx[i];
+        const ww = r?.[f.gi]?.[f.key];
+        if(!ww) { next=i; return touchState({...s, results:r, groupFixtureIdx: next}); }
+      }
+      return touchState({...s, results:r, groupFixtureIdx: current});
+    });
+  }
+
+  function playedCount(gi){
+    return Object.keys(results?.[gi] || {}).length;
+  }
+
+  function confirmGroup(gi){
+    if(!canEdit) return;
+    if(playedCount(gi) < 6) return;
+    setState(s=>{
+      const gc = (s.groupConfirmed || new Array(s.groups.length).fill(false)).slice();
+      gc[gi] = true;
+      return touchState({...s, groupConfirmed: gc});
+    });
+  }
+
+  function unconfirmGroup(gi){
+    if(!canEdit) return;
+    setState(s=>{
+      const gc = (s.groupConfirmed || new Array(s.groups.length).fill(false)).slice();
+      gc[gi] = false;
+      return touchState({...s, groupConfirmed: gc});
+    });
+  }
+
+  function standings(g){ return calcGroupStandings(groups, results, g); }
+
+  const allPlayed = groups.every((g,i)=>Object.keys(results[i]||{}).length===6);
+  const allConfirmed = groupConfirmed.length===groups.length && groupConfirmed.every(Boolean);
+  function advance(){
+    if(!canEdit) return;
+    if(!allConfirmed) return;
+    const qualified = groups.flatMap((_,i)=>standings(i).slice(0,2).map(p=>p.name));
+    setState(s=>({
+      ...s,
+      version:APP_VERSION,
+      mode:"knockout",
+      knockout:generateKnockout(qualified),
+      qualifiedByGroup: groups.map((_,i)=>standings(i).slice(0,2).map(p=>p.name)),
+    }));
+  }
+
+  const currentFixture = fixtures.length ? fixtures[fixtureIdx] : null;
+  const nextFixture = useMemo(()=>{
+    if(!fixtures.length) return null;
+    // Find the next unplayed fixture after the current index.
+    for(let i=fixtureIdx+1; i<fixtures.length; i++){
+      const f = fixtures[i];
+      if(!winnerForFixture(f)) return f;
+    }
+    return null;
+  }, [fixtures, fixtureIdx, results]);
+
+  return <div>
+    <div className="group">
+      <h3>Fixture</h3>
+      {!fixtures.length
+        ? <div>No fixtures yet.</div>
+        : fixtureIdx >= fixtures.length
+        ? <div>All group matches completed.</div>
+        : (() => {
+          const f = fixtures[fixtureIdx];
+          const label = `Group ${String.fromCharCode(65+f.gi)}`;
+          const w = results?.[f.gi]?.[f.key];
+          const locked = groupConfirmed[f.gi];
+          return <div>
+            <div style={{marginBottom:8, color:"#94a3b8"}}>{label} — Match {fixtureIdx+1} of {fixtures.length}</div>
+            <div style={{marginBottom:8, color:"#94a3b8"}}>
+              Playing now: <strong>{f.p1}</strong> vs <strong>{f.p2}</strong>
+              {w ? <span> — winner: <strong>{w}</strong></span> : null}
+            </div>
+            <div style={{display:"flex", gap:8, marginBottom:8, flexWrap:"wrap"}}>
+              <button disabled={!canEdit || fixtureIdx===0} onClick={()=>setFixtureIdx(fixtureIdx-1)}>Prev</button>
+              <button disabled={!canEdit || fixtureIdx===fixtures.length-1} onClick={()=>setFixtureIdx(fixtureIdx+1)}>Next</button>
+              <button disabled={!canEdit} onClick={()=>setFixtureIdx(nextUnplayedFrom(fixtureIdx))}>Next unplayed</button>
+            </div>
+            {locked && <div style={{marginBottom:8, color:"#94a3b8"}}>This group is confirmed (read-only).</div>}
+            <button disabled={!canEdit || locked} className={w===f.p1?"winner":""} onClick={()=>setWinner(f.gi,f.p1,f.p2,f.p1)}>{f.p1}</button>
+            <button disabled={!canEdit || locked} className={w===f.p2?"winner":""} onClick={()=>setWinner(f.gi,f.p1,f.p2,f.p2)}>{f.p2}</button>
+            {w && !locked && <div style={{marginTop:8, color:"#94a3b8"}}>You can change the winner before confirming this group.</div>}
+          </div>;
+        })()
+      }
+    </div>
+
+    {groups.map((g,i)=>{
+      const table = standings(i);
+        const playingThisGroup = currentFixture && currentFixture.gi === i;
+        const playingWinner = playingThisGroup ? results?.[i]?.[currentFixture.key] : null;
+        const nextThisGroup = nextFixture && nextFixture.gi === i;
+      return <div className="group" key={i}>
+        <h3>Group {String.fromCharCode(65+i)}</h3>
+          {playingThisGroup && <div style={{margin:"6px 0 10px 0", color:"#94a3b8"}}>
+            Playing now: <strong>{currentFixture.p1}</strong> vs <strong>{currentFixture.p2}</strong>
+            {playingWinner ? <span> — winner: <strong>{playingWinner}</strong></span> : null}
+          </div>}
+          {nextThisGroup && !playingThisGroup && <div style={{margin:"6px 0 10px 0", color:"#94a3b8"}}>
+            Up next: <strong>{nextFixture.p1}</strong> vs <strong>{nextFixture.p2}</strong>
+          </div>}
+        <table>
+          <thead><tr><th>Player</th><th>P</th><th>W</th><th>L</th><th>%</th></tr></thead>
+          <tbody>
+            {table.map((p,idx)=><tr key={p.name} className={idx<2?"top2":""}>
+              <td>{p.name}</td><td>{p.g}</td><td>{p.w}</td><td>{p.g - p.w}</td><td>{(p.pct*100).toFixed(0)}%</td>
+            </tr>)}
+          </tbody>
+        </table>
+        <div style={{marginTop:8}}>
+          {!groupConfirmed[i] && <button disabled={!canEdit || playedCount(i)<6} onClick={()=>confirmGroup(i)}>
+            Confirm Group {String.fromCharCode(65+i)} Results
+          </button>}
+          {groupConfirmed[i] && <button disabled={!canEdit} onClick={()=>unconfirmGroup(i)}>
+            Unconfirm Group {String.fromCharCode(65+i)}
+          </button>}
+          <span style={{marginLeft:8, color:"#94a3b8"}}>
+            {playedCount(i)}/6 matches played{groupConfirmed[i] ? " (confirmed)" : ""}
+          </span>
+        </div>
+      </div>;
+    })}
+    {allPlayed && <button onClick={advance} disabled={!canEdit || !allConfirmed}>Advance to Knockout</button>}
+    {allPlayed && !allConfirmed && <div style={{marginTop:8, color:"#94a3b8"}}>Confirm each group before advancing.</div>}
+  </div>;
+}
+
+/* --- KNOCKOUT --- */
+function seedPositions(size){
+  // Standard balanced tournament seeding:
+  // 4:  [1,4,2,3]
+  // 8:  [1,8,4,5,2,7,3,6]
+  // 16: [1,16,8,9,4,13,5,12,2,15,7,10,3,14,6,11]
+  if(size<=2) return [1,2].slice(0,size);
+  const prev = seedPositions(size/2);
+  const comp = prev.map(s=>size+1-s);
+  const out=[];
+  for(let i=0;i<prev.length;i++){
+    out.push(prev[i], comp[i]);
+  }
+  return out;
+}
+
+function generateKnockout(players){
+  // Use a power-of-two bracket so any necessary byes happen in round 1 (not in the semis).
+  const size = 2**Math.ceil(Math.log2(players.length));
+  const padded = [...players];
+  while(padded.length<size) padded.push(null);
+
+  // Place players into bracket positions using seeding (input order = seed order).
+  const slots = seedPositions(size).map(seed => padded[seed-1] ?? null);
+
+  const roundsCount = Math.log2(size);
+  const rounds = new Array(roundsCount).fill(null).map((_,ri)=>{
+    const matchesInRound = size / (2**(ri+1));
+    const matches = new Array(matchesInRound).fill(null).map(_=>({
+      p1:null, p2:null, winner:null, score:[0,0], x:0, y:0
+    }));
+    return {matches};
+  });
+
+  rounds[0].matches.forEach((m,mi)=>{
+    m.p1 = slots[mi*2] ?? null;
+    m.p2 = slots[mi*2+1] ?? null;
+  });
+
+  layout(rounds);
+  return rounds;
+}
+
+function layout(rounds){
+  const gx=GX, gy=70;
+  rounds.forEach((r,ri)=>{
+    r.matches.forEach((m,mi)=>{
+      if(ri===0) m.x=BRACKET_MARGIN_LEFT, m.y=BRACKET_MARGIN_TOP + mi*gy*2;
+      else{
+        const a = rounds[ri-1].matches[mi*2];
+        const b = rounds[ri-1].matches[mi*2+1];
+        const ay = a?.y ?? 0;
+        const by = b?.y ?? ay;
+        m.x = ri*gx + BRACKET_MARGIN_LEFT;
+        m.y = (ay+by)/2;
+      }
+    });
+  });
+}
+
+function Knockout({state,setState,canEdit}){
+  const bracketTopRef = useRef(null);
+  // Re-layout every render so visual constants (like BRACKET_MARGIN_LEFT) apply
+  // even for brackets loaded from localStorage.
+  const rounds = useMemo(()=>{
+    const k = structuredClone(state.knockout);
+    layout(k);
+    return k;
+  }, [state.knockout]);
+  const roundNames = {1:"Final",2:"Semi",3:"Quarter",4:"R16",5:"R32",6:"R64"};
+
+  const showGroupTables = Array.isArray(state.groups) && !!state.results;
+
+  // Mobile UX: when knockout mounts, scroll to the bracket top reliably.
+  useEffect(()=>{
+    if(!(window.matchMedia && window.matchMedia("(max-width: 768px)").matches)) return;
+    const el = bracketTopRef.current;
+    if(!el) return;
+    // Next-tick + delayed retry helps on mobile browsers during layout.
+    requestAnimationFrame(()=>el.scrollIntoView({block:"start", behavior:"smooth"}));
+    setTimeout(()=>{ try{ el.scrollIntoView({block:"start", behavior:"smooth"}); }catch(_){ } }, 250);
+  }, []);
+
+  function getMatch(ri, mi){
+    return rounds?.[ri]?.matches?.[mi] ?? null;
+  }
+
+  const finalRoundIndex = rounds.length - 1;
+  const finalMatch = getMatch(finalRoundIndex, 0);
+  const winnerConnectorX = (finalMatch?.x ?? (finalRoundIndex * GX)) + GX;
+  const finalWinTarget = (typeof state.finalWinTarget === "number" ? state.finalWinTarget : 2);
+
+  const maxX = Math.max(
+    rounds.reduce((mx,r)=>Math.max(mx, ...r.matches.map(m=>(m.x??0) + MATCH_INSET_X + MATCH_WIDTH)), 0),
+    winnerConnectorX + MATCH_INSET_X + WINNER_WIDTH
+  );
+  const maxY = rounds.reduce((my,r)=>Math.max(my, ...r.matches.map(m=>m.y??0)), 0);
+  const MATCH_BOX_HEIGHT = 70; // approx height of the 2 buttons + spacing
+  const BRACKET_TIGHT_PADDING = 40;
+  const canvasW = (maxX + 250) || 600;
+  const bracketStyle = {
+    // Use an explicit height so we don't end up with lots of empty space below the last match.
+    height: Math.max((maxY + MATCH_BOX_HEIGHT + BRACKET_TIGHT_PADDING) || 0, 260),
+    width: "100%",
+  };
+  const svgW = canvasW;
+  const svgH = bracketStyle.height;
+
+  function participant(ri, mi, slot){
+    if(ri===0){
+      const m = getMatch(0, mi);
+      if(!m) return null;
+      return slot===0 ? m.p1 : m.p2;
+    }
+    return winnerOf(ri-1, mi*2 + slot);
+  }
+
+  function hasAnyParticipant(ri, mi){
+    return !!(participant(ri, mi, 0) || participant(ri, mi, 1));
+  }
+
+  function winnerOf(ri, mi){
+    const m = getMatch(ri, mi);
+    if(!m) return null;
+    const p1 = participant(ri, mi, 0);
+    const p2 = participant(ri, mi, 1);
+
+    // Keep explicit winners if still valid.
+    if(m.winner && (m.winner===p1 || m.winner===p2)) return m.winner;
+
+    // Auto-advance only for round-1 byes (null opponent from padding/seeding).
+    if(ri===0){
+      if(p1 && !p2) return p1;
+      if(p2 && !p1) return p2;
+    }
+
+    return null;
+  }
+
+  const winnerName = winnerOf(finalRoundIndex, 0);
+
+  function pick(r,m,p){
+    if(!canEdit) return;
+    setState(s=>{
+      const k = structuredClone(s.knockout);
+
+      // Clear winners in later rounds so the bracket re-derives cleanly from upstream results.
+      for(let ri=r+1; ri<k.length; ri++){
+        k[ri].matches.forEach(mm=>{ mm.winner=null; mm.score=[0,0]; });
+      }
+
+      const isFinal = (r === k.length - 1) && (m === 0);
+      const match = k[r].matches[m];
+      if(!match.score || match.score.length!==2) match.score=[0,0];
+
+      if(isFinal){
+        // First to 2 wins.
+        const p1 = participant(r, m, 0);
+        const p2 = participant(r, m, 1);
+        const slot = (p === p2) ? 1 : 0; // default to slot 0
+        const target = (typeof s.finalWinTarget === "number" ? s.finalWinTarget : 2);
+        match.score[slot] = Math.min(target, (match.score[slot]||0) + 1);
+        // If you change a finalist upstream, we clear later rounds (above), so score stays consistent.
+        if(match.score[slot] >= target){
+          match.winner = (slot===0) ? p1 : p2;
+        }else{
+          match.winner = null;
+        }
+      }else{
+        match.winner = p;
+      }
+      return touchState({...s, knockout:k});
+    });
+  }
+
+  return <div>
+    <div ref={bracketTopRef}></div>
+    <div className="bracket" style={bracketStyle}>
+      <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`}>
+      {rounds.slice(1).map((r,ri)=>r.matches.map((m,mi)=>{
+        const prev = rounds?.[ri]?.matches || [];
+        const a = prev[mi*2] || null;
+        const b = prev[mi*2+1] || null;
+        const ay = a?.y ?? 0;
+        const by = b?.y ?? ay;
+        return <g key={ri+"-"+mi}>
+          <line x1={(a?.x??0)+150} y1={ay+CONNECTOR_Y} x2={m.x} y2={ay+CONNECTOR_Y}/>
+          <line x1={(b?.x??0)+150} y1={by+CONNECTOR_Y} x2={m.x} y2={by+CONNECTOR_Y}/>
+          <line x1={m.x} y1={ay+CONNECTOR_Y} x2={m.x} y2={by+CONNECTOR_Y}/>
+        </g>;
+      }))}
+
+      {/* Small stub on the RIGHT side of the vertical connector line (x = m.x) */}
+      {rounds.slice(1).map((r,ri)=>r.matches.map((m,mi)=>{
+        const y = (m?.y ?? 0) + CONNECTOR_Y;
+        const x = (m?.x ?? 0);
+        return <line className="stub" key={"stub-"+ri+"-"+mi} x1={x} y1={y} x2={x+STUB_LEN} y2={y}/>;
+      }))}
+
+      {/* Winner connector (extra bracket column) */}
+      {finalMatch && (() => {
+        const y = (finalMatch.y ?? 0) + CONNECTOR_Y;
+        const x1 = (finalMatch.x ?? 0) + MATCH_INSET_X + MATCH_WIDTH;
+        const x2 = winnerConnectorX;
+        return <g key="winner-connector">
+          <line x1={x1} y1={y} x2={x2} y2={y}/>
+          <line x1={x2} y1={y-22} x2={x2} y2={y+22}/>
+          <line className="stub" x1={x2} y1={y} x2={x2+STUB_LEN} y2={y}/>
+        </g>;
+      })()}
+      </svg>
+
+      {rounds.map((r,ri)=>{
+      const rn = roundNames[rounds.length-ri] || "";
+      return <div key={"round"+ri}>
+        <div className="round-label" style={{left:ri*220 + BRACKET_MARGIN_LEFT + MATCH_INSET_X, top:20}}>{rn}</div>
+        {r.matches.map((m,mi)=>{
+          const p1 = participant(ri, mi, 0);
+          const p2 = participant(ri, mi, 1);
+          const w = winnerOf(ri, mi);
+          const showBye = ((p1 && !p2) || (!p1 && p2)) && (winnerOf(ri, mi) === (p1 || p2));
+          const isFinal = (ri === rounds.length - 1) && (mi === 0);
+          const s0 = (m?.score?.[0] ?? 0);
+          const s1 = (m?.score?.[1] ?? 0);
+
+          return <div className="match" key={ri+"-"+mi} style={{left:(m.x ?? 0) + MATCH_INSET_X, top:m.y}}>
+            <button
+              disabled={!canEdit || !p1||!p2}
+              className={(w===p1?"winner":"") + ((ri>0 && p1 && !p2) ? " pending" : "")}
+              onClick={()=>p1 && pick(ri,mi,p1)}
+            >{p1 ? (isFinal ? `${p1} (${s0})` : p1) : "—"}</button>
+            <button
+              disabled={!canEdit || !p1||!p2}
+              className={(w===p2?"winner":"") + ((ri>0 && p2 && !p1) ? " pending" : "")}
+              onClick={()=>p2 && pick(ri,mi,p2)}
+            >{p2 ? (isFinal ? `${p2} (${s1})` : p2) : "—"}</button>
+            {showBye && <div className="bye">BYE</div>}
+          </div>;
+        })}
+      </div>;
+      })}
+
+      {/* Final note (inside bracket, directly under the "Final" label) */}
+      {rounds.length>0 && <div style={{
+        position:"absolute",
+        left:(finalRoundIndex*GX) + BRACKET_MARGIN_LEFT + MATCH_INSET_X,
+        top:42,
+        width:MATCH_WIDTH,
+        textAlign:"center",
+        color:"#94a3b8",
+        fontSize:12,
+        zIndex: 3,
+        pointerEvents: "none"
+      }}>
+        Race to <strong>{finalWinTarget}</strong>
+      </div>}
+
+      {/* Winner column */}
+      {finalMatch && <>
+        <div className="round-label" style={{left:winnerConnectorX + MATCH_INSET_X, top:20, width:WINNER_WIDTH}}>Winner</div>
+        <div className="match" style={{left:winnerConnectorX + MATCH_INSET_X, top:finalMatch.y, width:WINNER_WIDTH}}>
+          <div className="winner-box">
+            <div className="row">
+              <svg className="trophy" viewBox="0 0 64 64" aria-hidden="true">
+                <path fill="#facc15" d="M20 6h24v8c0 9-5 16-12 18-7-2-12-9-12-18V6z"/>
+                <path fill="#eab308" d="M24 26c2 2 5 4 8 4s6-2 8-4v10H24V26z"/>
+                <path fill="#facc15" d="M24 36h16v6c0 5-4 8-8 8s-8-3-8-8v-6z"/>
+                <path fill="#a16207" d="M22 50h20v6H22z"/>
+              </svg>
+              <div className="name">{winnerName || "—"}</div>
+            </div>
+            <div className="label">Champion</div>
+          </div>
+        </div>
+      </>}
+    </div>
+
+    {showGroupTables && <div style={{marginTop:16}}>
+      <h2 style={{margin:"8px 0 12px 0"}}>Group Tables</h2>
+      {state.groups.map((g,gi)=>{
+        const table = calcGroupStandings(state.groups, state.results, gi);
+        return <div className="group" key={"k-group-"+gi}>
+          <h3>Group {String.fromCharCode(65+gi)}</h3>
+          <table>
+            <thead><tr><th>Player</th><th>P</th><th>W</th><th>L</th><th>%</th></tr></thead>
+            <tbody>
+              {table.map((p,idx)=> {
+                return <tr key={p.name} className={idx<2?"top2":""}>
+                  <td>{p.name}</td><td>{p.g}</td><td>{p.w}</td><td>{p.g - p.w}</td><td>{(p.pct*100).toFixed(0)}%</td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+        </div>;
+      })}
+    </div>}
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <ErrorBoundary>
+    <App/>
+  </ErrorBoundary>
+);
+</script>
+</body>
+</html>
