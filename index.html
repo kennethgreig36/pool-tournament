@@ -20,7 +20,6 @@ th,td{border:1px solid #333;padding:4px;text-align:center;}
 .top2{background:#1e4620;}
 .winner{background:#4caf50;color:#000;opacity:1;}
 .bracket{position:relative;padding:60px 20px 20px 80px; background:#0b0b0b; overflow-x:visible;}
-.match{position:absolute;width:150px;}
 .match button{width:100%; margin-bottom:4px; background:#1a1a1a; color:#eee; border:1px solid #333; opacity:1;}
 .match button:disabled{opacity:0.45; cursor:not-allowed;}
 .match button.winner{background:#4caf50; color:#000; border-color:#2e7d32; opacity:1;}
@@ -30,7 +29,8 @@ th,td{border:1px solid #333;padding:4px;text-align:center;}
 svg{position:absolute; top:0; left:0; pointer-events:none; overflow:visible;}
 svg line{stroke:#666; stroke-width:2;}
 svg line.stub{stroke:#666; stroke-width:2;}
-.round-label{position:absolute;color:#eee;font-weight:bold;text-align:center;width:150px;}
+.round-label{position:absolute;color:#eee;font-weight:bold;text-align:center;width:150px;pointer-events:none;}
+.match{position:absolute;width:150px;z-index:2;}
 .winner-box{display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center;width:100%;height:52px;border-radius:6px;background:#111;border:1px solid #333;color:#eee;}
 .winner-box .label{font-size:11px;color:#94a3b8;}
 .winner-box .name{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;}
@@ -207,7 +207,7 @@ function Landing(){
         <h1>Lamp Pool Tournament</h1>
         <p className="subtitle">Live bracket shown here when the tournament starts.</p>
         <div className="landing-details">
-          <div className="row"><div className="k">Starts</div><div>6th February, 7pm</div></div>
+          <div className="row"><div className="k">When</div><div>Friday 6th February, 7pm</div></div>
           <div className="row"><div className="k">Entry</div><div>£5</div></div>
           <div className="row"><div className="k">Prize</div><div>Winner takes all</div></div>
         </div>
@@ -228,7 +228,7 @@ function AppHeader({canEdit,onReset,showReset=true,showViewOnly=true}){
       <div className="center">
         <div>
           <div className="title">Lamp Pool Tournament</div>
-          <div className="sub">Live standings & bracket</div>
+          <div className="sub">Friday 6th February, 7pm · Live standings & bracket</div>
         </div>
         <div className="mini" aria-hidden="true">
           {/* small pool-themed icon */}
@@ -260,6 +260,8 @@ function migrateState(input){
   if(typeof s.updatedBy !== "string") s.updatedBy = "migrated";
   if(typeof s.finalWinTarget !== "number") s.finalWinTarget = 2;
   s.finalWinTarget = Math.max(1, Math.min(5, Math.floor(s.finalWinTarget)));
+  if(typeof s.semiFinalWinTarget !== "number") s.semiFinalWinTarget = 1;
+  s.semiFinalWinTarget = Math.max(1, Math.min(5, Math.floor(s.semiFinalWinTarget)));
 
   if(!("mode" in s)) s.mode = null;
 
@@ -781,6 +783,7 @@ function App() {
 function Setup({onStart}){
   const [text,setText]=useState("");
   const [finalWinTarget,setFinalWinTarget] = useState(2);
+  const [semiFinalWinTarget,setSemiFinalWinTarget] = useState(1);
   const players=text.split("\n").map(p=>p.trim()).filter(Boolean);
   const divisibleBy4 = players.length % 4 === 0;
   function startGroup() {
@@ -793,6 +796,7 @@ function Setup({onStart}){
       version:APP_VERSION,
       mode:"group",
       finalWinTarget,
+      semiFinalWinTarget,
       groups,
       groupSchedule,
       groupFixtureIdx: 0,
@@ -803,10 +807,21 @@ function Setup({onStart}){
   function startKnockout() {
     if(players.length<2) return;
     const shuffled = shuffleInPlace([...players]);
-    onStart(touchState({version:APP_VERSION, mode:"knockout", finalWinTarget, knockout:generateKnockout(shuffled)}));
+    onStart(touchState({version:APP_VERSION, mode:"knockout", finalWinTarget, semiFinalWinTarget, knockout:generateKnockout(shuffled)}));
   }
   return <div className="container">
     <AppHeader canEdit={true} showReset={false} showViewOnly={false}/>
+    <div className="group">
+      <div style={{color:"#94a3b8", marginBottom:6}}>Semi-final format</div>
+      <label style={{display:"block", marginBottom:6}}>Wins needed to win the semi-final</label>
+      <select value={semiFinalWinTarget} onChange={e=>setSemiFinalWinTarget(parseInt(e.target.value,10))}>
+        <option value={1}>1 (single game)</option>
+        <option value={2}>2 (first to 2)</option>
+        <option value={3}>3 (first to 3)</option>
+        <option value={4}>4 (first to 4)</option>
+        <option value={5}>5 (first to 5)</option>
+      </select>
+    </div>
     <div className="group">
       <div style={{color:"#94a3b8", marginBottom:6}}>Final format</div>
       <label style={{display:"block", marginBottom:6}}>Wins needed to win the final</label>
@@ -1094,9 +1109,11 @@ function Knockout({state,setState,canEdit}){
   }
 
   const finalRoundIndex = rounds.length - 1;
+  const semiRoundIndex = rounds.length - 2;
   const finalMatch = getMatch(finalRoundIndex, 0);
   const winnerConnectorX = (finalMatch?.x ?? (finalRoundIndex * GX)) + GX;
   const finalWinTarget = (typeof state.finalWinTarget === "number" ? state.finalWinTarget : 2);
+  const semiFinalWinTarget = (typeof state.semiFinalWinTarget === "number" ? state.semiFinalWinTarget : 1);
 
   const maxX = Math.max(
     rounds.reduce((mx,r)=>Math.max(mx, ...r.matches.map(m=>(m.x??0) + MATCH_INSET_X + MATCH_WIDTH)), 0),
@@ -1158,18 +1175,28 @@ function Knockout({state,setState,canEdit}){
       }
 
       const isFinal = (r === k.length - 1) && (m === 0);
+      const isSemiFinal = (r === k.length - 2);
+      const semiTarget = (typeof s.semiFinalWinTarget === "number" ? s.semiFinalWinTarget : 1);
       const match = k[r].matches[m];
       if(!match.score || match.score.length!==2) match.score=[0,0];
 
       if(isFinal){
-        // First to 2 wins.
         const p1 = participant(r, m, 0);
         const p2 = participant(r, m, 1);
-        const slot = (p === p2) ? 1 : 0; // default to slot 0
+        const slot = (p === p2) ? 1 : 0;
         const target = (typeof s.finalWinTarget === "number" ? s.finalWinTarget : 2);
         match.score[slot] = Math.min(target, (match.score[slot]||0) + 1);
-        // If you change a finalist upstream, we clear later rounds (above), so score stays consistent.
         if(match.score[slot] >= target){
+          match.winner = (slot===0) ? p1 : p2;
+        }else{
+          match.winner = null;
+        }
+      }else if(isSemiFinal && semiTarget > 1){
+        const p1 = participant(r, m, 0);
+        const p2 = participant(r, m, 1);
+        const slot = (p === p2) ? 1 : 0;
+        match.score[slot] = Math.min(semiTarget, (match.score[slot]||0) + 1);
+        if(match.score[slot] >= semiTarget){
           match.winner = (slot===0) ? p1 : p2;
         }else{
           match.winner = null;
@@ -1228,6 +1255,8 @@ function Knockout({state,setState,canEdit}){
           const w = winnerOf(ri, mi);
           const showBye = ((p1 && !p2) || (!p1 && p2)) && (winnerOf(ri, mi) === (p1 || p2));
           const isFinal = (ri === rounds.length - 1) && (mi === 0);
+          const isSemiFinal = (ri === semiRoundIndex) && (semiFinalWinTarget > 1);
+          const showScore = isFinal || isSemiFinal;
           const s0 = (m?.score?.[0] ?? 0);
           const s1 = (m?.score?.[1] ?? 0);
 
@@ -1236,18 +1265,32 @@ function Knockout({state,setState,canEdit}){
               disabled={!canEdit || !p1||!p2}
               className={(w===p1?"winner":"") + ((ri>0 && p1 && !p2) ? " pending" : "")}
               onClick={()=>p1 && pick(ri,mi,p1)}
-            >{p1 ? (isFinal ? `${p1} (${s0})` : p1) : "—"}</button>
+            >{p1 ? (showScore ? `${p1} (${s0})` : p1) : "—"}</button>
             <button
               disabled={!canEdit || !p1||!p2}
               className={(w===p2?"winner":"") + ((ri>0 && p2 && !p1) ? " pending" : "")}
               onClick={()=>p2 && pick(ri,mi,p2)}
-            >{p2 ? (isFinal ? `${p2} (${s1})` : p2) : "—"}</button>
+            >{p2 ? (showScore ? `${p2} (${s1})` : p2) : "—"}</button>
             {showBye && <div className="bye">BYE</div>}
           </div>;
         })}
       </div>;
       })}
 
+      {/* Semi-final note when race-to is used (z-index below .match so buttons stay clickable) */}
+      {rounds.length >= 2 && semiFinalWinTarget > 1 && <div style={{
+        position:"absolute",
+        left:(semiRoundIndex*GX) + BRACKET_MARGIN_LEFT + MATCH_INSET_X,
+        top:42,
+        width:MATCH_WIDTH,
+        textAlign:"center",
+        color:"#94a3b8",
+        fontSize:12,
+        zIndex: 1,
+        pointerEvents: "none"
+      }}>
+        Race to <strong>{semiFinalWinTarget}</strong>
+      </div>}
       {/* Final note (inside bracket, directly under the "Final" label) */}
       {rounds.length>0 && <div style={{
         position:"absolute",
@@ -1257,7 +1300,7 @@ function Knockout({state,setState,canEdit}){
         textAlign:"center",
         color:"#94a3b8",
         fontSize:12,
-        zIndex: 3,
+        zIndex: 1,
         pointerEvents: "none"
       }}>
         Race to <strong>{finalWinTarget}</strong>
